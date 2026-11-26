@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101412">
+  <title>GinkgoCam · Maison</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+</head>
+<body class="home">
+  <!-- Avant démarrage -->
+  <section id="boot" class="boot">
+    <div class="brand"><img src="icon.svg" alt=""><h1>GinkgoCam</h1></div>
+    <p class="lead">Station maison</p>
+    <p id="boot-msg" class="muted">…</p>
+    <button id="btn-start" class="big">Démarrer la surveillance</button>
+    <div class="row">
+      <button id="btn-pair-boot" class="ghost">Appairer mon iPhone</button>
+      <button id="btn-settings-boot" class="ghost">Réglages</button>
+    </div>
+    <p class="hint">Téléphone branché, écran face à la pièce, appli au premier plan.<br>
+      iPhone : Réglages › Accessibilité › Accès guidé. Android : épingler l’écran.</p>
+  </section>
+
+  <!-- En marche -->
+  <section id="live" class="live">
+    <video id="cam" playsinline muted autoplay></video>
+    <video id="remote" playsinline autoplay></video>
+    <div class="hud">
+      <div class="top">
+        <span id="status" class="pill" data-state="off">…</span>
+        <span id="net" class="pill" data-ok="0">Connexion…</span>
+      </div>
+      <div class="panel">
+        <div class="meter"><span>Son</span><i><b id="lvl"></b></i></div>
+        <div class="meter dog"><span>Chien</span><i><b id="dogbar"></b></i><em id="dogpct">0 %</em></div>
+        <p class="heard">Entendu : <strong id="heard">—</strong></p>
+        <p id="sum" class="sum">…</p>
+        <ul id="events" class="events"></ul>
+        <div class="row">
+          <button id="btn-pause">Pause</button>
+          <button id="btn-test">Tester un aboiement</button>
+          <button id="btn-pair">iPhone</button>
+          <button id="btn-settings">Réglages</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Veille (écran noir, économise la batterie, ne distrait pas Ginkgo) -->
+  <div id="saver" class="saver"><p id="saver-status">GinkgoCam</p><p id="saver-sum" class="muted"></p><p class="muted small">Touchez pour réveiller</p></div>
+
+  <dialog id="dlg-pair">
+    <h2>Appairer l’iPhone</h2>
+    <ol class="steps">
+      <li>Sur l’iPhone, installe l’appli gratuite <strong>ntfy</strong> (App Store), puis abonne-toi au sujet :<br><code id="ntfy-topic"></code></li>
+      <li>Scanne ce QR code avec l’appareil photo de l’iPhone et ouvre le lien <strong>dans Safari</strong>.</li>
+    </ol>
+    <div id="qr" class="qr"></div>
+    <input id="pair-link" readonly>
+    <div class="row">
+      <button id="btn-copy" class="ghost">Copier le lien</button>
+      <button id="btn-test-notif" class="ghost">Envoyer une notif de test</button>
+      <button data-close>Fermer</button>
+    </div>
+    <p class="hint">Ce lien est la clé de la caméra : ne le partage avec personne.</p>
+  </dialog>
+
+  <dialog id="dlg-settings">
+    <form id="form-settings">
+      <h2>Réglages</h2>
+      <fieldset>
+        <legend>Quand surveiller</legend>
+        <label><input type="radio" name="scheduleMode" value="hours"> Selon mes horaires</label>
+        <label><input type="radio" name="scheduleMode" value="always"> Tout le temps</label>
+        <div class="row">
+          <label>De <input type="time" name="start"></label>
+          <label>à <input type="time" name="end"></label>
+        </div>
+        <div class="days">
+          <label><input type="checkbox" name="day" value="1">L</label>
+          <label><input type="checkbox" name="day" value="2">M</label>
+          <label><input type="checkbox" name="day" value="3">M</label>
+          <label><input type="checkbox" name="day" value="4">J</label>
+          <label><input type="checkbox" name="day" value="5">V</label>
+          <label><input type="checkbox" name="day" value="6">S</label>
+          <label><input type="checkbox" name="day" value="0">D</label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Détection</legend>
+        <label>Sensibilité « chien » (plus bas = plus sensible) <span id="thr-val"></span>
+          <input type="range" name="threshold" min="15" max="80" step="1"></label>
+        <label>Volume minimum (dB) <input type="number" name="minDb" min="-80" max="-10" step="1"></label>
+        <label>Une notification max toutes les (min) <input type="number" name="cooldownMin" min="0" max="120"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Effacement</legend>
+        <label>Tout effacer chaque soir à (heure) <input type="number" name="purgeHour" min="0" max="23"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Caméra</legend>
+        <label><input type="radio" name="facing" value="user"> Avant (Ginkgo voit l’écran)</label>
+        <label><input type="radio" name="facing" value="environment"> Arrière (meilleure image)</label>
+      </fieldset>
+      <fieldset>
+        <legend>Avancé</legend>
+        <label>Serveur ntfy <input name="ntfyServer" type="url"></label>
+        <label>Relais TURN (si le direct ne passe pas en 4G) <input name="turnUrl" placeholder="turn:…:443?transport=tcp"></label>
+        <div class="row">
+          <label>Utilisateur <input name="turnUser" autocomplete="off"></label>
+          <label>Mot de passe <input name="turnPass" type="password" autocomplete="off"></label>
+        </div>
+        <p class="hint">Après un changement de relais TURN, ré-appaire l’iPhone.</p>
+      </fieldset>
+      <div class="row">
+        <button type="button" data-close class="ghost">Annuler</button>
+        <button type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="home.js"></script>
+</body>
+</html>

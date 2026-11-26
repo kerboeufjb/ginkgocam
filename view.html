@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101412">
+  <title>GinkgoCam</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body class="view">
+  <header class="bar">
+    <div class="brand"><img src="icon.svg" alt=""><h1>GinkgoCam</h1></div>
+    <span id="net" class="pill" data-ok="0">…</span>
+  </header>
+
+  <section class="unpaired-msg card">
+    <h2>Pas encore appairé</h2>
+    <p>Sur le téléphone de la maison, ouvre <strong>GinkgoCam › Station maison › Appairer mon iPhone</strong>
+      et scanne le QR code avec l’appareil photo de cet iPhone.</p>
+  </section>
+
+  <main class="paired">
+    <section class="card home-card">
+      <div class="row between">
+        <span>Maison : <span id="home-status" class="pill" data-state="off">…</span></span>
+        <button id="btn-live" class="big">📹 Voir en direct</button>
+      </div>
+      <p id="home-info" class="muted small"></p>
+      <div class="meter"><span>Son</span><i><b id="lvl"></b></i></div>
+      <div class="meter dog"><span>Chien</span><i><b id="dogbar"></b></i></div>
+      <p class="heard small">En ce moment : <strong id="heard">—</strong></p>
+    </section>
+
+    <section class="card">
+      <h2>Aujourd’hui</h2>
+      <div class="kpis">
+        <div><b id="k-ep">0</b><span>épisodes</span></div>
+        <div><b id="k-bark">0 s</b><span>d’aboiements</span></div>
+        <div><b id="k-long">—</b><span>le plus long</span></div>
+      </div>
+      <p id="verdict" class="verdict"></p>
+      <div id="chart" class="chart" aria-label="Aboiements par heure"></div>
+    </section>
+
+    <section class="card">
+      <h2>Journal</h2>
+      <ul id="timeline" class="timeline"></ul>
+      <div class="row">
+        <button id="btn-pause" class="ghost">Mettre en pause</button>
+        <button id="btn-test" class="ghost">Tester (faux aboiement)</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Direct plein écran -->
+  <section class="call">
+    <video id="remote" playsinline autoplay></video>
+    <video id="self" playsinline autoplay muted></video>
+    <p id="live-msg" class="live-msg"></p>
+    <div class="call-bar">
+      <button id="btn-mic" data-on="0">🔇 Parler à Ginkgo</button>
+      <button id="btn-cam">📷 Me cacher</button>
+      <button id="btn-hang" class="danger">Raccrocher</button>
+    </div>
+  </section>
+
+  <dialog id="dlg-clip">
+    <video id="clip-video" playsinline controls></video>
+    <div class="row"><button data-close>Fermer</button></div>
+  </dialog>
+
+  <script type="module" src="view.js"></script>
+</body>
+</html>
