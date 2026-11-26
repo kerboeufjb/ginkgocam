@@ -100,6 +100,8 @@ fieldset label:has(input[type=radio]), fieldset label:has(input[type=checkbox]) 
 body.view { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 .bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; position: sticky; top: 0; background: var(--bg); z-index: 1; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin: 0 auto 12px; max-width: 640px; }
+.install { border-color: var(--accent); }
+[hidden] { display: none !important; }
 .unpaired-msg { display: none; }
 body.unpaired .unpaired-msg { display: block; }
 body.unpaired .paired { display: none; }

@@ -7,8 +7,14 @@
   <title>GinkgoCam</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
+  <script>
+    // iPhone déjà appairé (et ce n'est pas la station) : on va directement à la vue.
+    try {
+      if (localStorage.getItem('ginkgocam.view') && !localStorage.getItem('ginkgocam.home')) location.replace('view.html');
+    } catch (e) { /* stockage bloqué */ }
+  </script>
 </head>
 <body class="index">
   <main class="boot">

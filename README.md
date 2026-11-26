@@ -50,9 +50,10 @@ home.html                                               view.html
 **iPhone de JB** :
 1. Installer **ntfy** (App Store, gratuit), s'abonner au sujet affiché dans « Appairer mon iPhone ».
 2. Scanner le QR code avec l'appareil photo, ouvrir dans **Safari**.
-3. Toucher « Envoyer une notif de test » sur la station pour vérifier.
+3. Une fois la page appairée ouverte : Partager › **Sur l'écran d'accueil**. L'icône garde l'appairage dans son adresse (`view.html#p=…`) : plus jamais de QR code à rescanner, même si Safari vide sa mémoire.
+4. Toucher « Envoyer une notif de test » sur la station pour vérifier.
 
-> Safari efface les données d'un site non visité pendant 7 jours : si l'iPhone affiche « Pas encore appairé », rescanner le QR code.
+> L'appairage est gardé à la fois dans l'adresse de la page et dans la mémoire du navigateur. Ne partage ni cette adresse ni une capture de la barre d'adresse : c'est la clé de la caméra.
 
 ## Limites connues (honnêtes)
 

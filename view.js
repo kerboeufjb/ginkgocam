@@ -1,20 +1,24 @@
 // GinkgoCam — VUE IPHONE : direct de l'appartement, parler à Ginkgo, journal du jour, clips.
-import { fr, iceServers, decodePairing, hhmm, dur, summarize, sleep } from './common.js';
+import { fr, iceServers, encodePairing, decodePairing, hhmm, dur, summarize, sleep } from './common.js';
 
 const $ = (s) => document.querySelector(s);
 const log = (...a) => console.log('[GinkgoCam]', ...a);
 const KEY = 'ginkgocam.view';
 
 // ---------------------------------------------------------------- appairage
-if (location.hash.startsWith('#p=')) {
-  try {
-    const p = decodePairing(location.hash.slice(3));
-    localStorage.setItem(KEY, JSON.stringify(p));
-  } catch (err) { log('pairing', err); }
-  history.replaceState(null, '', location.pathname);
-}
+// L'appairage vit dans l'adresse (#p=…) ET dans le stockage local.
+// Sur iPhone, Safari, l'icône d'écran d'accueil et les autres navigateurs n'ont pas la même mémoire :
+// garder l'adresse complète fait qu'une icône ou un favori ouvre toujours GinkgoCam déjà appairé.
 let pair = null;
-try { pair = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { pair = null; }
+if (location.hash.startsWith('#p=')) {
+  try { pair = decodePairing(location.hash.slice(3)); } catch (err) { log('pairing', err); }
+}
+if (pair) {
+  try { localStorage.setItem(KEY, JSON.stringify(pair)); } catch { /* stockage bloqué : l'adresse suffit */ }
+} else {
+  try { pair = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { pair = null; }
+  if (pair) history.replaceState(null, '', location.pathname + '#p=' + encodePairing(pair));
+}
 
 // ---------------------------------------------------------------- état
 let peer, conn, call, local, events = [], status = null, reconnectTimer;
@@ -266,12 +270,26 @@ function setupNtfy() {
   });
 }
 
+// Propose l'icône d'écran d'accueil tant que la page n'est pas ouverte depuis elle.
+function setupInstallHint() {
+  const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('ginkgocam.installHint') === 'off'; } catch { /* */ }
+  if (standalone || dismissed) return;
+  $('#install-hint').hidden = false;
+  $('#btn-install-ok').addEventListener('click', () => {
+    $('#install-hint').hidden = true;
+    try { localStorage.setItem('ginkgocam.installHint', 'off'); } catch { /* */ }
+  });
+}
+
 // ---------------------------------------------------------------- démarrage
 if (!pair) {
   document.body.classList.add('unpaired');
 } else {
   connect();
   setupNtfy();
+  setupInstallHint();
   $('#btn-live').addEventListener('click', startLive);
   $('#btn-hang').addEventListener('click', stopLive);
   $('#btn-mic').addEventListener('click', () => setMic($('#btn-mic').dataset.on !== '1'));

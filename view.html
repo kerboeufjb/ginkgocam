@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101412">
   <title>GinkgoCam</title>
-  <link rel="manifest" href="manifest.webmanifest">
+  <!-- Pas de manifeste ici : l'icône d'écran d'accueil doit garder l'adresse complète (avec l'appairage). -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="GinkgoCam">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
@@ -19,11 +23,23 @@
 
   <section class="unpaired-msg card">
     <h2>Pas encore appairé</h2>
-    <p>Sur le téléphone de la maison, ouvre <strong>GinkgoCam › Station maison › Appairer mon iPhone</strong>
-      et scanne le QR code avec l’appareil photo de cet iPhone.</p>
+    <p>Si tu as déjà appairé : ouvre GinkgoCam depuis <strong>l’icône sur ton écran d’accueil</strong>.</p>
+    <p>Sinon, sur le téléphone de la maison : <strong>Station maison › iPhone</strong>, puis scanne le QR code
+      avec l’appareil photo de cet iPhone. C’est à faire une seule fois.</p>
   </section>
 
   <main class="paired">
+    <section id="install-hint" class="card install" hidden>
+      <h2>📲 À faire une seule fois</h2>
+      <p>Pour ne plus jamais avoir à rescanner le QR code, mets GinkgoCam sur ton écran d’accueil :</p>
+      <ol class="steps">
+        <li>Touche le bouton <strong>Partager</strong> de Safari (carré avec une flèche vers le haut).</li>
+        <li>Choisis <strong>Sur l’écran d’accueil</strong>, puis <strong>Ajouter</strong>.</li>
+        <li>Ensuite, ouvre toujours GinkgoCam depuis cette icône.</li>
+      </ol>
+      <button id="btn-install-ok" class="ghost">C’est fait</button>
+    </section>
+
     <section class="card home-card">
       <div class="row between">
         <span>Maison : <span id="home-status" class="pill" data-state="off">…</span></span>
