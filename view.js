@@ -241,11 +241,37 @@ function verdict(s) {
   return 'Ginkgo aboie beaucoup aujourd’hui : la voisine n’a peut-être pas tort.';
 }
 
+// ---------------------------------------------------------------- notifications ntfy
+function setupNtfy() {
+  const server = (pair.s || 'https://ntfy.sh').replace(/\/$/, '');
+  $('#v-topic').textContent = pair.n || '(sujet manquant : ré-appaire avec le QR code)';
+  try { if (!localStorage.getItem('ginkgocam.ntfyOk')) $('#ntfy-box').open = true; } catch { /* */ }
+  $('#btn-copy-topic').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(pair.n); $('#ntfy-msg').textContent = 'Sujet copié ✅ — colle-le dans ntfy.'; }
+    catch { $('#ntfy-msg').textContent = 'Copie impossible : sélectionne le sujet à la main.'; }
+  });
+  $('#btn-self-notif').addEventListener('click', async () => {
+    $('#ntfy-msg').textContent = 'Envoi…';
+    try {
+      const r = await fetch(server + '/', {
+        method: 'POST',
+        body: JSON.stringify({ topic: pair.n, title: 'GinkgoCam', message: 'Test depuis ton iPhone : l’abonnement ntfy marche ✅', tags: ['dog'], click: location.href.split('#')[0] }),
+      });
+      if (!r.ok) throw new Error('ntfy a répondu ' + r.status);
+      $('#ntfy-msg').textContent = 'Envoyée ✅. Rien dans ntfy d’ici 10 s ? Le sujet dans ntfy n’est pas exactement celui-ci : supprime-le et recolle-le.';
+      try { localStorage.setItem('ginkgocam.ntfyOk', '1'); } catch { /* */ }
+    } catch (err) {
+      $('#ntfy-msg').textContent = 'Échec de l’envoi : ' + err.message + ' (pas de réseau ?)';
+    }
+  });
+}
+
 // ---------------------------------------------------------------- démarrage
 if (!pair) {
   document.body.classList.add('unpaired');
 } else {
   connect();
+  setupNtfy();
   $('#btn-live').addEventListener('click', startLive);
   $('#btn-hang').addEventListener('click', stopLive);
   $('#btn-mic').addEventListener('click', () => setMic($('#btn-mic').dataset.on !== '1'));

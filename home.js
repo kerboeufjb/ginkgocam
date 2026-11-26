@@ -314,9 +314,11 @@ async function notify(title, message, priority = 3) {
       method: 'POST',
       body: JSON.stringify({ topic: cfg.ntfyTopic, title, message, priority, tags: ['dog'], click }),
     });
+    lastNotifError = r.ok ? '' : 'ntfy a répondu ' + r.status;
     return r.ok;
-  } catch (err) { log('ntfy', err); return false; }
+  } catch (err) { log('ntfy', err); lastNotifError = err.message || String(err); return false; }
 }
+let lastNotifError = '';
 
 // ---------------------------------------------------------------- liaison avec l'iPhone (WebRTC / PeerJS)
 let peer, activeCall = null, retryTimer;
@@ -585,7 +587,7 @@ $('#btn-pair-boot').addEventListener('click', openPair);
 $('#btn-test').addEventListener('click', () => { if (running) runTest(); });
 $('#btn-test-notif').addEventListener('click', async (e) => {
   const ok = await notify('GinkgoCam', 'Test de notification : si tu lis ça, c’est branché ✅', 3);
-  e.target.textContent = ok ? 'Envoyée ✅' : 'Échec ❌';
+  e.target.textContent = ok ? `Envoyée ✅ sur ${cfg.ntfyTopic}` : `Échec ❌ ${lastNotifError}`;
 });
 $('#btn-copy').addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText($('#pair-link').value); });
 $('#form-settings').addEventListener('submit', saveSettings);
