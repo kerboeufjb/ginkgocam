@@ -34,7 +34,7 @@ function connect() {
   peer.on('open', openData);
   peer.on('error', (err) => {
     log('peer', err.type, err.message);
-    if (err.type === 'peer-unavailable') setNet('Le téléphone de la maison ne répond pas');
+    if (err.type === 'peer-unavailable') setNet('Maison injoignable');
     else setNet('Hors ligne');
     scheduleReconnect();
   });
@@ -139,7 +139,7 @@ function stopLive() {
 }
 function setMic(on) {
   if (local) local.getAudioTracks().forEach((t) => { t.enabled = on; });
-  $('#btn-mic').textContent = on ? '🎙️ Micro ouvert — couper' : '🔇 Parler à Ginkgo';
+  $('#btn-mic').textContent = on ? '🎙️ Micro ouvert' : '🔇 Parler';
   $('#btn-mic').dataset.on = on ? '1' : '0';
 }
 function toggleCam() {
@@ -148,6 +148,7 @@ function toggleCam() {
   const on = !(tracks[0] && tracks[0].enabled);
   tracks.forEach((t) => { t.enabled = on; });
   $('#btn-cam').textContent = on ? '📷 Me cacher' : '📷 Me montrer';
+  $('#btn-cam').setAttribute('aria-pressed', on ? 'false' : 'true');
 }
 
 // ---------------------------------------------------------------- clips

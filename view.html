@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101412">
+  <meta name="theme-color" content="#EEF1EA" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#18201C" media="(prefers-color-scheme: dark)">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@600;700&display=swap">
   <title>GinkgoCam</title>
   <!-- Pas de manifeste ici : l'icône d'écran d'accueil doit garder l'adresse complète (avec l'appairage). -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -93,9 +97,9 @@
     <video id="self" playsinline autoplay muted></video>
     <p id="live-msg" class="live-msg"></p>
     <div class="call-bar">
-      <button id="btn-mic" data-on="0">🔇 Parler à Ginkgo</button>
-      <button id="btn-cam">📷 Me cacher</button>
-      <button id="btn-hang" class="danger">Raccrocher</button>
+      <button id="btn-mic" data-on="0" aria-label="Parler à Ginkgo (micro)">🔇 Parler</button>
+      <button id="btn-cam" aria-label="Montrer ou cacher mon visage">📷 Me cacher</button>
+      <button id="btn-hang" class="danger" aria-label="Raccrocher">✕ Raccrocher</button>
     </div>
   </section>
 
