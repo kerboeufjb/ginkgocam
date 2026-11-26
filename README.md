@@ -55,6 +55,17 @@ home.html                                               view.html
 
 > L'appairage est gardé à la fois dans l'adresse de la page et dans la mémoire du navigateur. Ne partage ni cette adresse ni une capture de la barre d'adresse : c'est la clé de la caméra.
 
+## Télé : Ginkgo te voit en grand
+
+`tv.html` s'ouvre dans le navigateur de la télé (Samsung : appli **Internet**). La caméra reste le téléphone : la télé ne fait qu'**afficher** ton visage et jouer ta voix quand tu appelles.
+
+1. Sur la télé : navigateur › `kerboeufjb.github.io/ginkgocam` › **📺 Télé**. Un code à 6 chiffres s'affiche.
+2. Sur la station : **iPhone / Télé** › section Télé › taper le code › **Associer la télé**, puis **Tester la télé (10 s)**.
+3. Chaque matin : ouvrir la page Télé et appuyer **OK** sur « Activer l'écran et le son » (règle des navigateurs pour le son).
+4. Quand tu appelles depuis l'iPhone, la station renvoie ton image et ta voix à la télé. Le son du téléphone ne se coupe que si la télé confirme qu'elle joue le son ; sinon il reste sur le téléphone.
+
+Limites : la télé doit rester allumée sur cette page (penser à couper l'arrêt automatique / la veille éco). Si le micro de la station entend la télé, tu peux t'entendre en léger écho.
+
 ## Limites connues (honnêtes)
 
 - La station doit rester **au premier plan, écran allumé** : un navigateur coupe le micro en arrière-plan. Le journal note chaque passage en arrière-plan pour que tu saches s'il y a eu un trou.

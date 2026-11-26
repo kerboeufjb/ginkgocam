@@ -341,6 +341,15 @@ function startPeer() {
     }
   });
   peer.on('connection', (conn) => {
+    // La télé confirme (ou non) qu'elle joue le son de l'appel.
+    if (conn.metadata && conn.metadata.tv && cfg.tv && conn.metadata.token === cfg.tv.secret) {
+      conn.on('data', (m) => {
+        if (!m || m.type !== 'tvAudio' || !tvCall) return;
+        setPhoneAudio(!m.ok);
+        setTvState(m.ok ? 'Télé connectée 📺 — le son passe par la télé' : 'Télé connectée, mais son bloqué : il reste sur le téléphone');
+      });
+      return;
+    }
     if (!conn.metadata || conn.metadata.token !== cfg.token) { conn.on('open', () => conn.close()); return; }
     conn.on('open', () => { conns.add(conn); conn.send({ type: 'state', ...statePayload() }); });
     conn.on('data', (msg) => handleMsg(conn, msg));
@@ -408,11 +417,64 @@ function showRemote(remote) {
   v.play().catch(() => {});
   document.body.classList.add('in-call');
   wake();
+  callTv(remote); // ton visage et ta voix partent aussi sur la télé, si elle est associée
 }
 function hideRemote() {
   const v = $('#remote');
   v.srcObject = null;
   document.body.classList.remove('in-call');
+  endTv();
+}
+
+// ---------------------------------------------------------------- télé (affichage en grand)
+let tvCall = null, tvTestTimer = null;
+function setTvState(t) { const el = $('#tv-state'); if (el) el.textContent = t; }
+function renderTv() {
+  setTvState(cfg.tv ? 'Télé associée ✅ — ton appel s’y affichera automatiquement.' : 'Aucune télé associée.');
+}
+// Le son passe par la télé quand elle est connectée, sinon par le téléphone.
+function setPhoneAudio(on) { $('#remote').muted = !on; }
+
+function callTv(stream) {
+  if (!cfg.tv || !peer || !peer.open || !stream) return;
+  endTv();
+  const c = peer.call(cfg.tv.id, stream, { metadata: { token: cfg.tv.secret } });
+  if (!c) return;
+  tvCall = c;
+  const pc = c.peerConnection;
+  if (pc) {
+    pc.addEventListener('iceconnectionstatechange', () => {
+      const s = pc.iceConnectionState;
+      // Le son du téléphone n'est coupé que lorsque la télé confirme qu'elle le joue (message tvAudio).
+      if (s === 'connected' || s === 'completed') setTvState('Télé connectée 📺');
+      else if (s === 'failed' || s === 'closed' || s === 'disconnected') { setPhoneAudio(true); renderTv(); }
+    });
+  }
+  const done = () => { if (tvCall === c) { tvCall = null; setPhoneAudio(true); renderTv(); } };
+  c.on('close', done);
+  c.on('error', done);
+}
+function endTv() {
+  clearTimeout(tvTestTimer);
+  if (tvCall) { const c = tvCall; tvCall = null; try { c.close(); } catch { /* déjà fermé */ } }
+  setPhoneAudio(true);
+}
+
+function pairTv(code) {
+  return new Promise((resolve, reject) => {
+    if (!peer || !peer.open) { reject(new Error('Démarre d’abord la surveillance sur ce téléphone.')); return; }
+    const conn = peer.connect('ginkgocam-tvpair-' + code, { reliable: true });
+    const to = setTimeout(() => { try { conn.close(); } catch { /* */ } reject(new Error('Télé introuvable : vérifie le code et que la page Télé est bien ouverte.')); }, 15000);
+    conn.on('data', (m) => {
+      if (!m || m.type !== 'tv') return;
+      cfg.tv = { id: m.id, secret: m.secret };
+      saveCfg(cfg);
+      conn.send({ type: 'paired' });
+      clearTimeout(to);
+      setTimeout(() => { try { conn.close(); } catch { /* */ } }, 1500);
+      resolve();
+    });
+  });
 }
 
 // ---------------------------------------------------------------- écran : veille, wake lock
@@ -479,6 +541,7 @@ function openPair() {
   $('#qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
   $('#pair-link').value = url;
   $('#ntfy-topic').textContent = cfg.ntfyTopic;
+  renderTv();
   $('#dlg-pair').showModal();
 }
 
@@ -589,6 +652,24 @@ $('#btn-test-notif').addEventListener('click', async (e) => {
   const ok = await notify('GinkgoCam', 'Test de notification : si tu lis ça, c’est branché ✅', 3);
   e.target.textContent = ok ? `Envoyée ✅ sur ${cfg.ntfyTopic}` : `Échec ❌ ${lastNotifError}`;
 });
+$('#btn-tv-pair').addEventListener('click', async () => {
+  const code = $('#tv-code').value.replace(/\D/g, '');
+  if (code.length !== 6) { setTvState('Le code fait 6 chiffres.'); return; }
+  setTvState('Recherche de la télé…');
+  try { await pairTv(code); $('#tv-code').value = ''; renderTv(); sysEvent('Télé associée'); }
+  catch (err) { setTvState('❌ ' + err.message); }
+});
+$('#btn-tv-test').addEventListener('click', () => {
+  if (!cfg.tv) { setTvState('Associe d’abord la télé.'); return; }
+  if (!running) { setTvState('Démarre d’abord la surveillance.'); return; }
+  if (activeCall) { setTvState('Un appel est en cours.'); return; }
+  // Image seule pour le test : le micro renvoyé vers la télé ferait un larsen.
+  if (!stream.getVideoTracks().length) { setTvState('Pas de caméra sur ce téléphone : rien à montrer pour le test.'); return; }
+  callTv(new MediaStream(stream.getVideoTracks()));
+  setTvState('Test en cours : la télé doit montrer la pièce pendant 10 s…');
+  tvTestTimer = setTimeout(() => { endTv(); renderTv(); }, 10000);
+});
+$('#btn-tv-unpair').addEventListener('click', () => { endTv(); delete cfg.tv; saveCfg(cfg); renderTv(); });
 $('#btn-copy').addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText($('#pair-link').value); });
 $('#form-settings').addEventListener('submit', saveSettings);
 $('#form-settings').threshold.addEventListener('input', (e) => { $('#thr-val').textContent = e.target.value + ' %'; });

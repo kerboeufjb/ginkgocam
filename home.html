@@ -45,7 +45,7 @@
         <div class="row">
           <button id="btn-pause">Pause</button>
           <button id="btn-test">Tester un aboiement</button>
-          <button id="btn-pair">iPhone</button>
+          <button id="btn-pair">iPhone / Télé</button>
           <button id="btn-settings">Réglages</button>
         </div>
       </div>
@@ -69,6 +69,19 @@
       <button data-close>Fermer</button>
     </div>
     <p class="hint">Ce lien est la clé de la caméra : ne le partage avec personne.</p>
+
+    <h2 class="sep">📺 Télé (Ginkgo te voit en grand)</h2>
+    <p class="hint">Sur la télé, ouvre le navigateur › <code>kerboeufjb.github.io/ginkgocam</code> › <strong>Télé</strong>.
+      Elle affiche un code à 6 chiffres : tape-le ici. Il faut que la surveillance soit démarrée.</p>
+    <div class="row">
+      <input id="tv-code" inputmode="numeric" maxlength="7" placeholder="Code télé" size="9">
+      <button id="btn-tv-pair" class="ghost">Associer la télé</button>
+    </div>
+    <p id="tv-state" class="hint"></p>
+    <div class="row">
+      <button id="btn-tv-test" class="ghost">Tester la télé (10 s)</button>
+      <button id="btn-tv-unpair" class="ghost">Dissocier</button>
+    </div>
   </dialog>
 
   <dialog id="dlg-settings">

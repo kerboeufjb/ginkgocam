@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GinkgoCam · Télé</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    /* Page pensée pour le navigateur d'une Smart TV : gros textes, peu d'effets, JS volontairement « ancien ». */
+    html, body { margin: 0; height: 100%; background: #000; color: #eef2ee; overflow: hidden;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #idle { position: absolute; left: 6%; top: 8%; max-width: 70%; }
+    #idle h1 { font-size: 44px; margin: 0 0 10px; color: #e9c46a; }
+    #idle p { font-size: 26px; margin: 8px 0; color: #93a197; }
+    #idle .big { font-size: 30px; color: #eef2ee; }
+    #code { font-size: 96px; letter-spacing: 14px; color: #e9c46a; font-weight: 700; margin: 10px 0; }
+    #clock { position: absolute; font-size: 40px; color: #3a463e; }
+    #go { font-size: 32px; padding: 18px 34px; border-radius: 14px; border: 0; background: #e9c46a; color: #1b1a12; margin-top: 20px; }
+    #go:focus { outline: 6px solid #fff; }
+    #v { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
+    body.call #v { display: block; }
+    body.call #idle, body.call #clock { display: none; }
+    .ok { color: #7bd389 !important; }
+    #unmute { display: none; position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%); z-index: 5;
+      font-size: 30px; padding: 16px 28px; border: 0; border-radius: 14px; background: #e9c46a; color: #1b1a12; }
+    #unmute:focus { outline: 6px solid #fff; }
+  </style>
+</head>
+<body>
+  <div id="idle">
+    <h1>GinkgoCam · Télé</h1>
+    <div id="pairing">
+      <p class="big">Sur le téléphone de la maison : <b>Appairer › Télé</b>, puis tape ce code :</p>
+      <div id="code">······</div>
+    </div>
+    <p id="state">Connexion…</p>
+    <button id="go">▶ Activer l’écran et le son</button>
+    <p id="hint">Appuie sur OK avec la télécommande (une seule fois à chaque ouverture).</p>
+  </div>
+  <div id="clock"></div>
+  <video id="v" playsinline autoplay></video>
+  <button id="unmute">🔇 Son bloqué par la télé — appuie sur OK</button>
+
+  <script>
+  (function () {
+    var KEY = 'ginkgocam.tv';
+    var ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }];
+    function $(id) { return document.getElementById(id); }
+    function rand(n) {
+      var a = 'abcdefghijkmnopqrstuvwxyz23456789', out = '', b = new Uint8Array(n);
+      crypto.getRandomValues(b);
+      for (var i = 0; i < n; i++) out += a[b[i] % a.length];
+      return out;
+    }
+    function digits() { var b = new Uint32Array(1); crypto.getRandomValues(b); return String(100000 + (b[0] % 900000)); }
+    function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
+    function save() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* stockage bloqué */ } }
+
+    var st = load();
+    if (!st || !st.id) { st = { id: 'ginkgocam-tv-' + rand(20), secret: rand(32), code: digits(), paired: false }; save(); }
+
+    var main = null, pairPeer = null, current = null, armed = false;
+
+    function render() {
+      $('pairing').style.display = st.paired ? 'none' : 'block';
+      $('code').textContent = st.code.slice(0, 3) + ' ' + st.code.slice(3);
+    }
+    function setState(t, ok) { $('state').textContent = t; $('state').className = ok ? 'ok' : ''; }
+
+    // ---- liaison permanente : reçoit l'appel que la station renvoie
+    function startMain() {
+      main = new Peer(st.id, { config: { iceServers: ICE }, debug: 1 });
+      main.on('open', function () { setState(st.paired ? 'Associée à la maison ✅ — en attente d’un appel de JB' : 'En attente de l’association…', st.paired); });
+      main.on('disconnected', function () { setTimeout(function () { if (!main.destroyed) main.reconnect(); }, 3000); });
+      main.on('error', function (err) {
+        if (['unavailable-id', 'network', 'server-error', 'socket-error', 'socket-closed'].indexOf(err.type) >= 0) {
+          setState('Hors ligne — nouvel essai…');
+          setTimeout(function () { try { main.destroy(); } catch (e) { /* */ } startMain(); }, 6000);
+        }
+      });
+      main.on('call', function (call) {
+        if (!call.metadata || call.metadata.token !== st.secret) { call.close(); return; }
+        if (!st.paired) { st.paired = true; save(); render(); stopPairing(); }
+        if (current) { try { current.close(); } catch (e) { /* */ } }
+        current = call;
+        call.answer(); // sens unique : la télé ne renvoie ni image ni son
+        call.on('stream', function (s) { show(s, call.peer); });
+        call.on('close', function () { if (current === call) { current = null; hide(); } });
+        call.on('error', function () { if (current === call) { current = null; hide(); } });
+      });
+    }
+
+    // ---- association : code à 6 chiffres tapé sur la station
+    function startPairing() {
+      if (st.paired) return;
+      pairPeer = new Peer('ginkgocam-tvpair-' + st.code, { config: { iceServers: ICE }, debug: 1 });
+      pairPeer.on('error', function (err) {
+        if (err.type === 'unavailable-id') { st.code = digits(); save(); render(); }
+        try { pairPeer.destroy(); } catch (e) { /* */ }
+        setTimeout(startPairing, 3000);
+      });
+      pairPeer.on('connection', function (conn) {
+        conn.on('open', function () { conn.send({ type: 'tv', id: st.id, secret: st.secret }); });
+        conn.on('data', function (m) {
+          if (m && m.type === 'paired') { st.paired = true; save(); render(); setState('Associée à la maison ✅ — en attente d’un appel de JB', true); stopPairing(); }
+        });
+      });
+    }
+    function stopPairing() { if (pairPeer) { try { pairPeer.destroy(); } catch (e) { /* */ } pairPeer = null; } }
+
+    // Le son passe par un AudioContext débloqué par l'appui sur OK : il reste actif toute la journée,
+    // alors qu'un <video> avec le son peut être bloqué par la télé au moment de l'appel.
+    var ctx = null, srcNode = null, curStream = null, curPeer = null;
+    function routeAudio(s) {
+      if (!ctx || ctx.state !== 'running' || !s.getAudioTracks().length) return false;
+      try {
+        if (srcNode) srcNode.disconnect();
+        srcNode = ctx.createMediaStreamSource(s);
+        srcNode.connect(ctx.destination);
+        return true;
+      } catch (e) { return false; }
+    }
+    // Dit à la station si la télé joue bien le son (sinon le téléphone garde le son).
+    function report(ok) {
+      if (!main || !curPeer) return;
+      var c = main.connect(curPeer, { metadata: { tv: true, token: st.secret }, reliable: true });
+      c.on('open', function () { c.send({ type: 'tvAudio', ok: ok }); setTimeout(function () { try { c.close(); } catch (e) { /* */ } }, 3000); });
+    }
+    function show(s, peerId) {
+      var v = $('v');
+      curStream = s; curPeer = peerId;
+      v.srcObject = s;
+      v.muted = true; // l'image démarre toujours ; le son passe par routeAudio
+      document.body.className = 'call';
+      var p = v.play();
+      if (p && p.catch) p.catch(function () { /* */ });
+      if (!s.getAudioTracks().length) return; // test image seule
+      var ok = routeAudio(s);
+      report(ok);
+      if (!ok) { $('unmute').style.display = 'block'; try { $('unmute').focus(); } catch (e) { /* */ } }
+    }
+    function hide() {
+      $('v').srcObject = null; document.body.className = ''; $('unmute').style.display = 'none';
+      if (srcNode) { try { srcNode.disconnect(); } catch (e) { /* */ } srcNode = null; }
+      curStream = null;
+    }
+    function unlockAudio() {
+      try {
+        var C = window.AudioContext || window.webkitAudioContext;
+        if (!C) return;
+        if (!ctx) {
+          ctx = new C();
+          var o = ctx.createOscillator(), g = ctx.createGain();
+          g.gain.value = 0; o.connect(g); g.connect(ctx.destination); o.start(); // garde le contexte éveillé
+        }
+        if (ctx.resume) ctx.resume();
+      } catch (e) { /* */ }
+    }
+    $('unmute').addEventListener('click', function () {
+      armed = true; unlockAudio();
+      setTimeout(function () {
+        var ok = curStream ? routeAudio(curStream) : false;
+        if (!ok) { var v = $('v'); v.muted = false; v.play(); ok = !v.muted; }
+        report(ok);
+        $('unmute').style.display = 'none';
+      }, 200);
+    });
+
+    // Un appui sur OK débloque le son (règle des navigateurs).
+    $('go').addEventListener('click', function () {
+      armed = true;
+      unlockAudio();
+      $('go').style.display = 'none';
+      $('hint').textContent = 'Son activé. Laisse cette page ouverte.';
+    });
+    setTimeout(function () { try { $('go').focus(); } catch (e) { /* */ } }, 300);
+
+    // Horloge discrète qui se déplace (évite le marquage de l'écran).
+    function tick() {
+      var d = new Date(), c = $('clock');
+      c.textContent = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      if (d.getSeconds() < 2) { c.style.left = (10 + Math.random() * 70) + '%'; c.style.top = (55 + Math.random() * 35) + '%'; }
+    }
+    $('clock').style.left = '70%'; $('clock').style.top = '80%';
+    setInterval(tick, 1000); tick();
+
+    render();
+    startMain();
+    startPairing();
+  })();
+  </script>
+</body>
+</html>
