@@ -9,7 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@600;700&display=swap">
   <title>GinkgoCam · Maison</title>
-  <link rel="manifest" href="manifest.webmanifest">
+  <!-- Pas de manifeste ici : une icône d'écran d'accueil doit garder l'adresse complète (#k=…, identité de la station). -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
@@ -45,6 +47,7 @@
         <div class="meter dog"><span>Chien</span><i><b id="dogbar"></b></i><em id="dogpct">0 %</em></div>
         <p class="heard">Entendu : <strong id="heard">—</strong></p>
         <p id="sum" class="sum">…</p>
+        <p id="notif-line" class="notif-line" data-ok="1"></p>
         <ul id="events" class="events"></ul>
         <div class="row">
           <button id="btn-pause">Pause</button>

@@ -46,6 +46,9 @@ home.html                                               view.html
 4. **Démarrer la surveillance**, autoriser caméra et micro.
 5. Verrouiller l'appli au premier plan : iPhone → Réglages › Accessibilité › **Accès guidé** ; Android → **Épingler l'écran**. L'écran passe en noir après 1 min (veille), mais l'appli reste active.
 6. Désactiver le verrouillage auto si besoin (iPhone : Réglages › Luminosité › Verrouillage auto › Jamais).
+7. À chaque démarrage, l'iPhone reçoit « ✅ GinkgoCam en marche ». **Pas reçue = rien n'arrivera** : vérifie avant de partir. La ligne « Dernière notification » de la station dit si un envoi a échoué (il est retenté pendant 20 min).
+
+> L'identité de la station est gardée dans son adresse (`home.html#k=…`) en plus de la mémoire du navigateur : rouvrir la station depuis une icône ou un favori garde le même appairage. Si la station affiche « 🆕 Nouvelle station », il faut ré-appairer l'iPhone.
 
 **iPhone de JB** :
 1. Installer **ntfy** (App Store, gratuit), s'abonner au sujet affiché dans « Appairer mon iPhone ».
@@ -70,7 +73,7 @@ Limites : la télé doit rester allumée sur cette page (penser à couper l'arr�
 
 - La station doit rester **au premier plan, écran allumé** : un navigateur coupe le micro en arrière-plan. Le journal note chaque passage en arrière-plan pour que tu saches s'il y a eu un trou.
 - Pas de « pré-enregistrement » : le clip commence ~1 s après le premier aboiement.
-- En 4G, certains opérateurs bloquent la liaison directe → étape 7 (relais TURN).
+- En 4G, certains opérateurs bloquent la liaison directe → étape 7 (relais TURN). Sans relais, la page iPhone affiche quand même le journal du jour : la station en dépose un résumé toutes les 10 min (et un signe de vie par heure) dans le sujet ntfy silencieux `<sujet>-journal`. Le direct et les clips, eux, demandent la liaison directe.
 - Le serveur public PeerJS (mise en relation) et ntfy.sh sont des services gratuits tiers : s'ils tombent, la détection et les clips continuent, seul l'accès à distance est coupé.
 - Filmer chez soi est permis ; si quelqu'un d'autre entre (ménage, propriétaire, visite), il faut l'en informer.
 

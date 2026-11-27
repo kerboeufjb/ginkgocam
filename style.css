@@ -176,6 +176,8 @@ body.in-call .hud .panel { display: none; }
 .heard { margin: 4px 0 2px; font-size: 13px; color: var(--muted); }
 .heard strong { color: var(--text); }
 .sum { margin: 4px 0; font-weight: 600; font-size: 14px; }
+.notif-line { margin: 2px 0 4px; font-size: 12.5px; color: var(--muted); }
+.notif-line[data-ok="0"] { color: var(--terracotta); font-weight: 600; }
 .events { list-style: none; margin: 0; padding: 0; font-size: 12.5px; color: var(--muted); max-height: 58px; overflow: auto; }
 .events li.bark { color: var(--terracotta); }
 .saver {

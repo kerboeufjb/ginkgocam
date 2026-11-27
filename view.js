@@ -185,6 +185,11 @@ function renderStatus() {
   $('#home-status').dataset.state = status.watching ? 'on' : 'off';
   let info = `Horaires : ${status.schedule} · effacement à ${status.purgeHour} h`;
   if (status.battery != null) info += ` · batterie ${status.battery} %${status.charging ? ' ⚡' : ' (débranché !)'}`;
+  if (status.viaNtfy && journalSeen) {
+    const ago = Math.round((Date.now() - journalSeen) / 60000);
+    info += ` · direct indisponible : journal reçu par ntfy, nouvelles de la maison à ${hhmm(journalSeen)}`
+      + (ago > 75 ? ' ⚠️ (la station ne donne plus signe de vie)' : '');
+  }
   $('#home-info').textContent = info;
   $('#btn-pause').textContent = status.paused ? 'Reprendre la surveillance' : 'Mettre en pause';
 }
@@ -271,6 +276,51 @@ function setupNtfy() {
   });
 }
 
+// ---------------------------------------------------------------- journal de secours (ntfy)
+// Quand la liaison directe ne passe pas (4G, wifi du travail), on relit le résumé que la station
+// dépose dans le sujet ntfy « <sujet>-journal » (silencieux, ntfy le garde 12 h).
+let journalTimer = null, journalSeen = 0;
+function purgeBoundary(hour) {
+  const b = new Date(); b.setHours(hour, 0, 0, 0);
+  if (Date.now() < b.getTime()) b.setDate(b.getDate() - 1);
+  return b.getTime();
+}
+async function pollJournal() {
+  clearTimeout(journalTimer);
+  journalTimer = setTimeout(pollJournal, 60000);
+  if (!pair.n || (conn && conn.open)) return;
+  const server = (pair.s || 'https://ntfy.sh').replace(/\/$/, '');
+  let msgs;
+  try {
+    const r = await fetch(`${server}/${encodeURIComponent(pair.n + '-journal')}/json?poll=1&since=12h`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('ntfy ' + r.status);
+    msgs = (await r.text()).split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((m) => m && m.event === 'message')
+      .map((m) => { try { return JSON.parse(m.message); } catch { return null; } })
+      .filter((p) => p && p.v === 1);
+  } catch (err) { log('journal ntfy', err); return; }
+  if (!msgs.length || (conn && conn.open)) return;
+  msgs.sort((a, b) => a.at - b.at);
+  const last = msgs[msgs.length - 1];
+  const limit = purgeBoundary(last.ph != null ? last.ph : 23);
+  const got = [];
+  for (const p of msgs) for (const e of p.eps || []) {
+    if (e.s < limit) continue;
+    got.push({ id: 'n' + e.s, type: 'bark', test: !!e.t, start: e.s, end: e.e, barkSec: e.b, peak: (e.p || 0) / 100, label: e.l || 'Bark' });
+  }
+  // fusion avec ce qu'on connaît déjà (un même épisode ne compte qu'une fois)
+  for (const g of got) {
+    if (!events.some((e) => e.type === 'bark' && Math.abs(e.start - g.start) < 3000)) events.push(g);
+  }
+  events.sort((a, b) => a.start - b.start);
+  journalSeen = last.at;
+  status = {
+    text: last.st, watching: !!last.w, paused: false, schedule: last.sch, purgeHour: last.ph,
+    battery: last.bat, charging: last.chg, viaNtfy: true,
+  };
+  renderAll();
+}
+
 // Propose l'icône d'écran d'accueil tant que la page n'est pas ouverte depuis elle.
 function setupInstallHint() {
   const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
@@ -289,6 +339,7 @@ if (!pair) {
   document.body.classList.add('unpaired');
 } else {
   connect();
+  setTimeout(pollJournal, 8000); // laisse 8 s à la liaison directe avant de passer par ntfy
   setupNtfy();
   setupInstallHint();
   $('#btn-live').addEventListener('click', startLive);
@@ -300,6 +351,6 @@ if (!pair) {
   $('#btn-test').addEventListener('click', () => { if (conn && conn.open) conn.send({ type: 'test' }); });
   document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => { $('#clip-video').pause(); b.closest('dialog').close(); }));
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible' && !(conn && conn.open)) { await sleep(300); connect(); }
+    if (document.visibilityState === 'visible' && !(conn && conn.open)) { await sleep(300); connect(); setTimeout(pollJournal, 8000); }
   });
 }

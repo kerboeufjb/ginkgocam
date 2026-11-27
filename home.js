@@ -2,7 +2,7 @@
 // Filme, écoute, reconnaît les aboiements (YAMNet, sur l'appareil), enregistre un clip,
 // envoie une notification (ntfy), accepte l'appel vidéo de l'iPhone et efface tout chaque soir.
 import {
-  DOG_LABELS, fr, DEFAULTS, randId, iceServers, encodePairing, hhmm, dur, summarize, sleep,
+  DOG_LABELS, fr, DEFAULTS, randId, iceServers, encodePairing, decodePairing, hhmm, dur, summarize, sleep,
 } from './common.js';
 import { AudioClassifier, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.14/audio_bundle.mjs';
 
@@ -14,19 +14,40 @@ const log = (...a) => console.log('[GinkgoCam]', ...a);
 // ---------------------------------------------------------------- réglages
 const CFG_KEY = 'ginkgocam.home';
 function saveCfg(c) { try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch { /* stockage bloqué */ } }
+// L'identité de la station (adresse PeerJS, clé, sujet ntfy) vit aussi dans l'adresse (#k=…).
+// Sans ça, ouvrir la station depuis une icône d'écran d'accueil ou un autre navigateur
+// (mémoire séparée) créait une NOUVELLE identité : l'iPhone appairé ne recevait plus rien.
+function idFromHash() {
+  if (!location.hash.startsWith('#k=')) return null;
+  try {
+    const k = decodePairing(location.hash.slice(3));
+    return k && k.peerId && k.token && k.ntfyTopic ? k : null;
+  } catch { return null; }
+}
+let freshIdentity = false;
 function loadCfg() {
   let c = {};
   try { c = JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch { c = {}; }
   c = { ...DEFAULTS, facing: 'user', ...c };
+  const h = idFromHash();
+  if (h && h.peerId !== c.peerId) {
+    c.peerId = h.peerId; c.token = h.token; c.ntfyTopic = h.ntfyTopic;
+    saveCfg(c);
+  }
   if (!c.peerId) {
     c.peerId = 'ginkgocam-' + randId(20);
     c.token = randId(32);
     c.ntfyTopic = 'ginkgo-' + randId(18);
+    freshIdentity = true;
     saveCfg(c);
   }
   return c;
 }
 let cfg = loadCfg();
+try {
+  history.replaceState(null, '', location.pathname + location.search + '#k='
+    + encodePairing({ peerId: cfg.peerId, token: cfg.token, ntfyTopic: cfg.ntfyTopic }));
+} catch { /* adresse non modifiable : le stockage local suffit */ }
 
 // ---------------------------------------------------------------- stockage local (IndexedDB)
 let db;
@@ -235,12 +256,14 @@ function startEpisode(f, hits, test = false) {
   startClip(ep);
   saveEvent(publicEp(ep));
   const now = Date.now();
-  if (!activeCall && now - det.lastNotif > cfg.cooldownMin * 60000) {
+  // Pas de notification seulement si tu regardes VRAIMENT le direct (appel connecté).
+  if (!callLive() && now - det.lastNotif > cfg.cooldownMin * 60000) {
     det.lastNotif = now;
     notify(
       test ? 'Test — Ginkgo aboie' : '🐶 Ginkgo aboie',
       `${fr(ep.label)} détecté à ${hhmm(ep.start)} (confiance ${Math.round(ep.peak * 100)} %). Touche pour voir en direct.`,
       4,
+      { retry: true },
     );
   }
 }
@@ -251,6 +274,7 @@ function endEpisode() {
   det.ep = null;
   det.recent = [];
   saveEvent(publicEp(ep));
+  journalAdd(publicEp(ep));
   // 3 s de « queue » pour voir comment ça se calme
   setTimeout(() => { if (det.rec && det.rec._epId === ep.id) stopClip(); }, 3000);
 }
@@ -305,20 +329,105 @@ function stopClip() {
 }
 
 // ---------------------------------------------------------------- notification (ntfy)
-async function notify(title, message, priority = 3) {
-  if (!cfg.ntfyTopic) return false;
-  const click = new URL('view.html', location.href).href;
+async function postNtfy(body) {
+  const ctl = window.AbortController ? new AbortController() : null;
+  const to = ctl ? setTimeout(() => ctl.abort(), 15000) : null;
   try {
     // corps en texte brut = requête « simple », pas de pré-vol CORS
     const r = await fetch(cfg.ntfyServer.replace(/\/$/, '') + '/', {
-      method: 'POST',
-      body: JSON.stringify({ topic: cfg.ntfyTopic, title, message, priority, tags: ['dog'], click }),
+      method: 'POST', body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined,
     });
-    lastNotifError = r.ok ? '' : 'ntfy a répondu ' + r.status;
-    return r.ok;
-  } catch (err) { log('ntfy', err); lastNotifError = err.message || String(err); return false; }
+    if (r.status === 429) throw new Error('limite de messages ntfy atteinte');
+    if (!r.ok) throw new Error('ntfy a répondu ' + r.status);
+  } catch (err) {
+    throw err && err.name === 'AbortError' ? new Error('ntfy ne répond pas (réseau ?)') : err;
+  } finally { clearTimeout(to); }
 }
-let lastNotifError = '';
+
+// État des notifications, affiché sur la station et noté dans le journal en cas de panne.
+const notifState = { at: 0, ok: null, err: '', fails: 0 };
+let lastNotifError = '', pendingNotif = null, pendingTimer = null;
+function setNotifState(ok, err = '') {
+  const wasFailing = notifState.fails > 0;
+  notifState.at = Date.now(); notifState.ok = ok; notifState.err = err;
+  notifState.fails = ok ? 0 : notifState.fails + 1;
+  if (!ok && !wasFailing) sysEvent('⚠️ Notification non envoyée : ' + err);
+  if (ok && wasFailing) sysEvent('Notifications rétablies ✅');
+  renderNotif();
+}
+function renderNotif() {
+  const el = $('#notif-line');
+  if (!el) return;
+  if (notifState.ok === null) el.textContent = 'Notifications : aucune envoyée pour l’instant';
+  else if (notifState.ok) el.textContent = `Dernière notification : ${hhmm(notifState.at)} ✅`;
+  else el.textContent = `⚠️ Notification bloquée (${notifState.err})${pendingNotif ? ' — nouvel essai toutes les 30 s' : ''}`;
+  el.dataset.ok = notifState.ok === false ? '0' : '1';
+}
+
+async function notify(title, message, priority = 3, { retry = false } = {}) {
+  if (!cfg.ntfyTopic) return false;
+  const body = { topic: cfg.ntfyTopic, title, message, priority, tags: ['dog'], click: new URL('view.html', location.href).href };
+  try {
+    await postNtfy(body);
+    lastNotifError = '';
+    setNotifState(true);
+    return true;
+  } catch (err) {
+    log('ntfy', err);
+    lastNotifError = (err && err.message) || String(err);
+    if (retry) { pendingNotif = { body, until: Date.now() + 20 * 60000 }; armRetry(); }
+    setNotifState(false, lastNotifError);
+    return false;
+  }
+}
+// Une notification ratée (wifi qui saute…) est renvoyée jusqu'à 20 min plus tard.
+function armRetry() {
+  clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(retryNotif, 30000);
+}
+async function retryNotif() {
+  const p = pendingNotif;
+  if (!p) return;
+  if (Date.now() > p.until) { pendingNotif = null; renderNotif(); return; }
+  try {
+    await postNtfy(p.body);
+    if (pendingNotif === p) pendingNotif = null;
+    setNotifState(true);
+  } catch (err) {
+    lastNotifError = (err && err.message) || String(err);
+    setNotifState(false, lastNotifError);
+    armRetry();
+  }
+}
+window.addEventListener('online', () => { if (pendingNotif) retryNotif(); });
+
+// ---------------------------------------------------------------- journal de secours (ntfy, silencieux)
+// Au travail, la liaison directe iPhone ↔ maison ne passe pas toujours (4G, wifi d'entreprise).
+// La station dépose donc aussi un résumé dans un sujet ntfy « -journal » auquel l'appli ntfy
+// n'est PAS abonnée (aucune notification) : la page iPhone le relit pour afficher la journée.
+const journal = { eps: [], last: 0, timer: null };
+function journalAdd(ep) {
+  journal.eps.push({ s: ep.start, e: ep.end, b: ep.barkSec, p: Math.round((ep.peak || 0) * 100), l: ep.label, t: ep.test ? 1 : 0 });
+  if (!journal.timer) journal.timer = setTimeout(journalFlush, Math.max(0, journal.last + 10 * 60000 - Date.now()));
+}
+async function journalFlush() {
+  clearTimeout(journal.timer); journal.timer = null;
+  const eps = journal.eps.splice(0).slice(-40);
+  const s = summarize(events);
+  const msg = {
+    v: 1, at: Date.now(), st: statusText(), w: watching() ? 1 : 0,
+    sch: cfg.scheduleMode === 'always' ? 'Tout le temps' : `${cfg.start}–${cfg.end}`, ph: cfg.purgeHour,
+    bat: battery ? Math.round(battery.level * 100) : null, chg: battery ? battery.charging : null,
+    n: s.episodes, eps,
+  };
+  journal.last = Date.now();
+  try { await postNtfy({ topic: cfg.ntfyTopic + '-journal', message: JSON.stringify(msg), priority: 1 }); }
+  catch (err) {
+    log('journal', err);
+    journal.eps.unshift(...eps);
+    if (!journal.timer) journal.timer = setTimeout(journalFlush, 2 * 60000);
+  }
+}
 
 // ---------------------------------------------------------------- liaison avec l'iPhone (WebRTC / PeerJS)
 let peer, activeCall = null, retryTimer;
@@ -362,10 +471,32 @@ function startPeer() {
     activeCall = call;
     call.answer(stream);
     call.on('stream', (remote) => showRemote(remote));
-    const done = () => { if (activeCall === call) { activeCall = null; hideRemote(); } };
+    const done = () => {
+      if (activeCall !== call) return;
+      activeCall = null; hideRemote();
+      try { call.close(); } catch { /* déjà fermé */ }
+    };
     call.on('close', done);
     call.on('error', done);
+    // Si l'iPhone disparaît sans raccrocher (appli fermée, écran verrouillé, réseau coupé),
+    // PeerJS ne prévient pas toujours : sans ce garde-fou, la station se croyait « en appel »
+    // et ne notifiait plus rien de la journée.
+    const pc = call.peerConnection;
+    let lost = null;
+    if (pc) {
+      pc.addEventListener('iceconnectionstatechange', () => {
+        const s = pc.iceConnectionState;
+        clearTimeout(lost);
+        if (s === 'failed' || s === 'closed') done();
+        else if (s === 'disconnected') lost = setTimeout(() => { if (pc.iceConnectionState === 'disconnected') done(); }, 10000);
+      });
+    }
+    setTimeout(() => { if (activeCall === call && !callLive()) done(); }, 45000);
   });
+}
+function callLive() {
+  const pc = activeCall && activeCall.peerConnection;
+  return !!pc && (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed');
 }
 
 function broadcast(msg) {
@@ -485,7 +616,7 @@ async function keepAwake() {
 function wake() {
   document.body.classList.remove('dim');
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { if (!activeCall) document.body.classList.add('dim'); }, 60000);
+  idleTimer = setTimeout(() => { if (!callLive()) document.body.classList.add('dim'); }, 60000);
 }
 document.addEventListener('pointerdown', wake);
 document.addEventListener('visibilitychange', () => {
@@ -621,7 +752,7 @@ async function start() {
         battery = b;
         let warned = false;
         const check = () => {
-          if (!b.charging && b.level < 0.2 && !warned) { warned = true; notify('🔋 GinkgoCam', 'Le téléphone de la maison n’est plus branché (batterie < 20 %).', 3); }
+          if (!b.charging && b.level < 0.2 && !warned) { warned = true; notify('🔋 GinkgoCam', 'Le téléphone de la maison n’est plus branché (batterie < 20 %).', 3, { retry: true }); }
           if (b.charging) warned = false;
           renderStatus();
         };
@@ -632,8 +763,18 @@ async function start() {
     sysEvent('Surveillance démarrée');
     renderStatus();
     renderToday();
+    renderNotif();
     wake();
-    setInterval(() => { renderStatus(); purge(); }, 60000);
+    // Chaque démarrage prévient l'iPhone : pas de notif « en marche » = rien n'arrivera, à voir avant de partir.
+    notify('✅ GinkgoCam en marche',
+      `La station surveille (${cfg.scheduleMode === 'always' ? 'tout le temps' : `${cfg.start}–${cfg.end}`}). Si tu lis ça, les alertes aboiements arriveront ici.`,
+      3, { retry: true });
+    journalFlush();
+    setInterval(() => {
+      renderStatus(); purge();
+      // signe de vie dans le journal de secours, au moins une fois par heure
+      if (!journal.timer && Date.now() - journal.last > 60 * 60000) journalFlush();
+    }, 60000);
   } catch (err) {
     log(err);
     setBoot('Impossible de démarrer : ' + (err && err.message ? err.message : err));
@@ -674,4 +815,6 @@ $('#btn-copy').addEventListener('click', () => { navigator.clipboard && navigato
 $('#form-settings').addEventListener('submit', saveSettings);
 $('#form-settings').threshold.addEventListener('input', (e) => { $('#thr-val').textContent = e.target.value + ' %'; });
 document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
-setBoot(window.isSecureContext ? 'Pose le téléphone face à la pièce, branché, puis démarre.' : '⚠️ Ouvre cette page en https, sinon la caméra est bloquée.');
+setBoot(!window.isSecureContext ? '⚠️ Ouvre cette page en https, sinon la caméra est bloquée.'
+  : freshIdentity ? '🆕 Nouvelle station : appaire ton iPhone (bouton ci-dessous) avant de partir, sinon rien n’arrivera dessus.'
+    : 'Pose le téléphone face à la pièce, branché, puis démarre.');
