@@ -60,7 +60,7 @@ function scheduleReconnect() {
 function onData(msg) {
   if (!msg || typeof msg !== 'object') return;
   switch (msg.type) {
-    case 'state': events = msg.events || []; status = msg.status; renderAll(); break;
+    case 'state': events = msg.events || []; status = msg.status; adoptTurn(msg.turn); renderAll(); break;
     case 'status': status = msg.status; renderStatus(); break;
     case 'event': {
       const i = events.findIndex((e) => e.id === msg.event.id);
@@ -94,6 +94,18 @@ function onData(msg) {
     }
     default: break;
   }
+}
+
+// Le relais TURN réglé sur la station arrive ici tout seul : on le garde (adresse + mémoire)
+// pour la prochaine connexion, au travail ou en 4G. Pas besoin de rescanner le QR code.
+function adoptTurn(t) {
+  if (!t || typeof t !== 'object') return;
+  const same = (pair.turnUrl || '') === (t.turnUrl || '') && (pair.turnUser || '') === (t.turnUser || '') && (pair.turnPass || '') === (t.turnPass || '');
+  if (same) return;
+  pair = { ...pair, turnUrl: t.turnUrl || '', turnUser: t.turnUser || '', turnPass: t.turnPass || '' };
+  try { localStorage.setItem(KEY, JSON.stringify(pair)); } catch { /* l'adresse suffit */ }
+  try { history.replaceState(null, '', location.pathname + '#p=' + encodePairing(pair)); } catch { /* */ }
+  log('relais TURN mis à jour depuis la station');
 }
 
 // ---------------------------------------------------------------- direct

@@ -61,6 +61,34 @@ export function iceServers(cfg) {
   return list;
 }
 
+// Lit le bloc « ICE Servers » copié depuis le tableau de bord Metered (JSON ou code JavaScript).
+// Garde les adresses turn:/turns: et le premier couple utilisateur / mot de passe.
+export function parseIceBlock(text) {
+  const pick = (key) => [...String(text).matchAll(new RegExp(`["']?${key}["']?\\s*:\\s*["']([^"']+)["']`, 'g'))].map((m) => m[1]);
+  const urls = [...new Set(pick('urls').filter((u) => /^turns?:/.test(u)))];
+  const user = pick('username')[0] || '';
+  const pass = pick('credential')[0] || '';
+  if (!urls.length || !user || !pass) return null;
+  return { turnUrl: urls.join(','), turnUser: user, turnPass: pass };
+}
+
+// Vérifie qu'un relais TURN répond avec ces identifiants (cherche un candidat « relay »).
+export function testTurn(cfg, timeoutMs = 10000) {
+  const servers = iceServers(cfg).filter((s) => s.username);
+  if (!servers.length) return Promise.resolve({ ok: false, msg: 'Aucun relais renseigné.' });
+  return new Promise((resolve) => {
+    let pc;
+    const end = (ok, msg) => { clearTimeout(to); try { pc.close(); } catch { /* */ } resolve({ ok, msg }); };
+    const to = setTimeout(() => end(false, 'Le relais ne répond pas : vérifie l’adresse, l’utilisateur et le mot de passe.'), timeoutMs);
+    try {
+      pc = new RTCPeerConnection({ iceServers: servers, iceTransportPolicy: 'relay' });
+      pc.createDataChannel('test');
+      pc.onicecandidate = (e) => { if (e.candidate && / relay /.test(e.candidate.candidate)) end(true, 'Relais OK ✅ : le direct passera aussi en 4G.'); };
+      pc.createOffer().then((o) => pc.setLocalDescription(o)).catch((err) => end(false, 'Test impossible : ' + err.message));
+    } catch (err) { end(false, 'Adresse de relais invalide : ' + err.message); }
+  });
+}
+
 // Lien d'appairage : tout est dans le fragment (#), jamais envoyé à un serveur.
 export function encodePairing(obj) {
   const json = JSON.stringify(obj);

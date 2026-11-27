@@ -34,7 +34,7 @@ home.html                                               view.html
 | 4 | **Mettre en ligne en https** (obligatoire pour la caméra sur téléphone) — GitHub Pages | ⏳ à faire |
 | 5 | Installer : vieux téléphone (station) + iPhone (ntfy + appairage QR) | ⏳ à faire chez toi |
 | 6 | Calibrer 1–2 jours : sensibilité, volume mini, vérifier les faux positifs | ⏳ |
-| 7 | Si le direct ne passe pas en 4G : ajouter un relais TURN gratuit (Cloudflare ou Metered) dans Réglages › Avancé | ⏳ si besoin |
+| 7 | Si le direct ne passe pas en 4G : relais TURN gratuit Metered (dashboard.metered.ca › TURN Server › Add Credential › « Show ICE Servers Array »), bloc collé dans Station › Réglages › Avancé, « Tester le relais », Enregistrer. L'iPhone le reçoit tout seul à sa prochaine connexion à la maison, sans rescanner. | ⏳ compte à créer |
 | 8 | Bonus possibles : rapport du soir dans Paolo, phrase pré-enregistrée « Ginkgo, panier ! » envoyée d'un bouton | 💡 idées |
 
 ## Installation (étape 5)

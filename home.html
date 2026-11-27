@@ -136,7 +136,12 @@
           <label>Utilisateur <input name="turnUser" autocomplete="off"></label>
           <label>Mot de passe <input name="turnPass" type="password" autocomplete="off"></label>
         </div>
-        <p class="hint">Après un changement de relais TURN, ré-appaire l’iPhone.</p>
+        <label>…ou colle ici le bloc « ICE Servers » de Metered (remplit les 3 champs)
+          <textarea name="iceBlock" rows="3" autocomplete="off" spellcheck="false" placeholder="[ { urls: &quot;turn:…&quot;, username: &quot;…&quot;, credential: &quot;…&quot; } ]"></textarea></label>
+        <div class="row">
+          <button type="button" id="btn-turn-test" class="ghost">Tester le relais</button>
+        </div>
+        <p id="turn-msg" class="hint">Pas besoin de ré-appairer : l’iPhone reçoit le relais tout seul à sa prochaine connexion à la maison.</p>
       </fieldset>
       <div class="row">
         <button type="button" data-close class="ghost">Annuler</button>

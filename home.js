@@ -3,6 +3,7 @@
 // envoie une notification (ntfy), accepte l'appel vidéo de l'iPhone et efface tout chaque soir.
 import {
   DOG_LABELS, fr, DEFAULTS, randId, iceServers, encodePairing, decodePairing, hhmm, dur, summarize, sleep,
+  parseIceBlock, testTurn,
 } from './common.js';
 import { AudioClassifier, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@0.10.14/audio_bundle.mjs';
 
@@ -507,6 +508,8 @@ let battery = null;
 function statePayload() {
   return {
     events,
+    // Le relais TURN ne part que vers l'iPhone appairé (canal chiffré, clé vérifiée), jamais par ntfy.
+    turn: { turnUrl: cfg.turnUrl, turnUser: cfg.turnUser, turnPass: cfg.turnPass },
     status: {
       text: statusText(), watching: watching(), paused: manualPause,
       schedule: cfg.scheduleMode === 'always' ? 'Tout le temps' : `${cfg.start}–${cfg.end}`,
@@ -691,9 +694,22 @@ function openSettings() {
   $('#thr-val').textContent = f.threshold.value + ' %';
   $('#dlg-settings').showModal();
 }
+// Le bloc Metered collé, s'il y en a un, remplace les 3 champs du relais.
+function turnFromForm(f) {
+  const block = f.iceBlock.value.trim();
+  if (block) {
+    const t = parseIceBlock(block);
+    if (!t) return { error: 'Bloc collé illisible : il doit contenir urls « turn:… », username et credential.' };
+    f.turnUrl.value = t.turnUrl; f.turnUser.value = t.turnUser; f.turnPass.value = t.turnPass;
+    f.iceBlock.value = '';
+  }
+  return { turnUrl: f.turnUrl.value.trim(), turnUser: f.turnUser.value.trim(), turnPass: f.turnPass.value };
+}
 async function saveSettings(ev) {
   ev.preventDefault();
   const f = $('#form-settings');
+  const turn = turnFromForm(f);
+  if (turn.error) { $('#turn-msg').textContent = '❌ ' + turn.error; return; }
   const oldFacing = cfg.facing;
   const oldIce = JSON.stringify(iceServers(cfg));
   cfg = {
@@ -707,9 +723,10 @@ async function saveSettings(ev) {
     purgeHour: Number(f.purgeHour.value),
     facing: f.facing.value,
     ntfyServer: f.ntfyServer.value.trim() || DEFAULTS.ntfyServer,
-    turnUrl: f.turnUrl.value.trim(), turnUser: f.turnUser.value.trim(), turnPass: f.turnPass.value,
+    ...turn,
   };
   saveCfg(cfg);
+  broadcast({ type: 'state', ...statePayload() }); // l'iPhone connecté reçoit le nouveau relais tout de suite
   $('#dlg-settings').close();
   renderStatus();
   if (running && cfg.facing !== oldFacing) location.reload();
@@ -813,6 +830,15 @@ $('#btn-tv-test').addEventListener('click', () => {
 $('#btn-tv-unpair').addEventListener('click', () => { endTv(); delete cfg.tv; saveCfg(cfg); renderTv(); });
 $('#btn-copy').addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText($('#pair-link').value); });
 $('#form-settings').addEventListener('submit', saveSettings);
+$('#btn-turn-test').addEventListener('click', async (e) => {
+  const turn = turnFromForm($('#form-settings'));
+  if (turn.error) { $('#turn-msg').textContent = '❌ ' + turn.error; return; }
+  e.target.disabled = true;
+  $('#turn-msg').textContent = 'Test du relais… (10 s max)';
+  const r = await testTurn(turn);
+  $('#turn-msg').textContent = (r.ok ? '' : '❌ ') + r.msg + (r.ok ? ' Touche « Enregistrer ».' : '');
+  e.target.disabled = false;
+});
 $('#form-settings').threshold.addEventListener('input', (e) => { $('#thr-val').textContent = e.target.value + ' %'; });
 document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
 setBoot(!window.isSecureContext ? '⚠️ Ouvre cette page en https, sinon la caméra est bloquée.'
